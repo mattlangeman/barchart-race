@@ -31,6 +31,7 @@ export async function load({ params }) {
         }
     }
     keyframes.push([new Date(kb), rank(names, name => b.get(name) || 0)]);
+    console.log('keyframes', keyframes)
     let nameframes = d3.groups(keyframes.flatMap(([, data]) => data), d => d.name)
 
     return {

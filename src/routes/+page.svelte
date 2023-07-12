@@ -1,14 +1,13 @@
 <script>
 	import * as d3 from "d3";
-    import { fade } from 'svelte/transition';
     import numeral from 'numeral';
 
     /** @type {import('./$types').PageData} */
 	export let data
 
     console.log('data', data)
-    let duration = 200
-	let barSize = 48
+    let duration = 560
+	let barSize = 38
 	let numBars = 12
 
 	let margin = {
@@ -21,59 +20,44 @@
     let height = margin.top + barSize * numBars + margin.bottom
     let width = 910
 
-	//$: prev = new Map(nameframes.flatMap(([, data]) => d3.pairs(data, (a, b) => [b, a])))
-	//$: next = new Map(nameframes.flatMap(([, data]) => d3.pairs(data)))
-
     const y = d3.scaleBand()
         .domain(d3.range(numBars + 1))
         .rangeRound([margin.top, margin.top + barSize * (numBars + 1 + 0.1)])
         .padding(0.1)
 
-    let currentKeyframe = data.keyframes[0]
 
-    $: currentKeyframeDate = currentKeyframe[0]
-    $: currentKeyframeData = currentKeyframe[1]
+    const colorScale = d3.scaleOrdinal(d3.schemeTableau10);
+    const categoryByName = new Map(data.data.map(d => [d.name, d.category]))
+    colorScale.domain(Array.from(categoryByName.values()));
 
-    let barData = []
-    let currentYear = 2000
-
-    for (let i=0; i < numBars; i++) {
-        barData.push({
-            name: data.keyframes[0][1][i].name,
-            value: data.keyframes[0][1][i].value,
-            rank: data.keyframes[0][1][i].rank
-        })
-    }
+    let barData = data.keyframes[0][1]
+    let currentYear = data.keyframes[0][0]
 
     const timer = ms => new Promise(res => setTimeout(res, ms))
 
     async function playRace() {
         for (const keyframe of data.keyframes) {
             currentYear = keyframe[0]
-            let tmpbarData = keyframe[1].slice(0, numBars)
-            for (let i=0; i < numBars; i++) {
-                barData[i].name = tmpbarData[i].name
-                barData[i].value = tmpbarData[i].value
-            }
+            let newBarData = keyframe[1]
+            barData = newBarData
             await timer(duration)
-            /*
-            const transition = svg.transition()
-                .duration(duration)
-                .ease(d3.easeLinear);
-            barData = keyframe[1].slice(0, numBars)
-            invalidation.then(() => svg.interrupt());
-            await transition.end();
-            */
         }
     }
 
     playRace()
 
-    //$: barData = data.keyframes[190][1].slice(0, numBars)
     $: domain = [0, d3.max(barData, d => d.value) || 1]
     $: xScale = d3.scaleLinear(domain, [margin.left, width - margin.right])
 
     $: ticks = xScale.ticks(width / 160)
+
+    function fillOpacity(rank) {
+        if (rank >= numBars) {
+            return 0
+        } else {
+            return 0.6
+        }
+    }
 
 
 </script>
@@ -87,17 +71,21 @@
 {#if barData}
 <svg viewBox="0 0 {width} {height}">
     <g fill-opacity="0.6">
-        {#each barData as d, i}
-            <rect fill="#cccccc"
+        {#each barData as d (d.name)}
+            <rect
+                data-name="{d.name}"
+                style="transform:translate(0px, {y(Math.min(d.rank, numBars))}px)"
+                fill="{colorScale(categoryByName.get(d.name))}"
                 height="{y.bandwidth()}"
                 x="{xScale(0)}"
-                y="{y(i)}"
-                width="{xScale(d.value)-xScale(0)}">
+                width="{xScale(d.value)-xScale(0)}"
+                fill-opacity="{fillOpacity(d.rank)}"
+                >
             </rect>
         {/each}
     </g>
     <g tranform="translate(0, {margin.top})">
-        {#each ticks as x, i}
+        {#each ticks as x, i (i)}
             {#if i > 0}
             <g class="ticks" style="transform:translate({xScale(x)}px, 0px)">
                 <line
@@ -115,9 +103,9 @@
       {/each}
     </g>
     <g text-anchor="end">
-        {#each barData as d, i}
+        {#each barData as d (d.name)}
             <text class="bar-label"
-                style="transform:translate({xScale(d.value)-xScale(0)}px, {y(i)}px)"
+                style="transform:translate({xScale(d.value)-xScale(0)}px, {y(Math.min(d.rank, numBars))}px)"
                 x="-6"
                 y="21.5"
                 dy="-0.25em">
@@ -137,13 +125,15 @@
 </svg>
 {/if}
 
+
 <style>
     rect {
-        transition: width 250ms ease-in-out;
+        transition: all 500ms ease-in-out;
     }
 
+
     g.ticks {
-        transition: transform 250ms ease-in-out;
+        transition: transform 500ms ease-in-out;
     }
 
     text {
@@ -153,7 +143,7 @@
     }
 
     text.bar-label {
-        transition: transform 250ms ease-in-out;
+        transition: transform 500ms ease-in-out;
     }
 
     text.ticker {
