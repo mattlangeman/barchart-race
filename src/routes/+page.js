@@ -5,8 +5,13 @@ import * as d3 from "d3";
 function rank(names, value) {
     const data = Array.from(names, name => ({name, value: value(name)}));
     data.sort((a, b) => d3.descending(a.value, b.value));
-    for (let i = 0; i < data.length; ++i) data[i].rank = i;
-    return data;
+    let dataMap = new Map()
+    for (let i = 0; i < data.length; ++i) {
+        data[i].rank = i
+        //dataMap.set(data[i].name, {name: data[i].name, value: data[i].value, rank: i})
+    }
+    return data
+    //return dataMap;
 }
 
 /** @type {import('./$types').PageServerLoad} */

@@ -1,12 +1,14 @@
 <script>
 	import * as d3 from "d3";
     import numeral from 'numeral';
+    import {onMount} from 'svelte';
+
+    import { tweened } from "svelte/motion";
 
     /** @type {import('./$types').PageData} */
 	export let data
 
-    console.log('data', data)
-    let duration = 560
+    let duration = 500
 	let barSize = 38
 	let numBars = 12
 
@@ -28,28 +30,44 @@
 
     const colorScale = d3.scaleOrdinal(d3.schemeTableau10);
     const categoryByName = new Map(data.data.map(d => [d.name, d.category]))
+    const tweenedKeyframeData = tweened(null, { duration });
+    const tweenedKeyframeMax = tweened(null, { duration });
+
     colorScale.domain(Array.from(categoryByName.values()));
 
-    let barData = data.keyframes[0][1]
-    let currentYear = data.keyframes[0][0]
+    $: frameIndex = 0
+    $: keyframe = data.keyframes[frameIndex]
+    $: keyframeDate = keyframe[0]
+    $: keyframeData = keyframe[1]
+
+    console.log('names', data.names)
+    $: currentData = Array.from(data.names).map((name)=> ({
+        ...keyframeData.find((d) => d.name == name),
+    }))
+
+    $: console.log('currentData', currentData)
+
+    $: tweenedKeyframeData.set(currentData)
+    $: tweenedKeyframeMax.set(d3.max(keyframeData, d => d.value))
+    $: domain = [0, $tweenedKeyframeMax]
+    $: xScale = d3.scaleLinear(domain, [margin.left, width - margin.right])
+    $: ticks = xScale.ticks(width / 160)
 
     const timer = ms => new Promise(res => setTimeout(res, ms))
 
     async function playRace() {
-        for (const keyframe of data.keyframes) {
-            currentYear = keyframe[0]
-            let newBarData = keyframe[1]
-            barData = newBarData
+        let svg = d3.select('svg#id-bar-race')
+        console.log('svg', svg)
+        for (let i=0; i < data.keyframes.length; i++) {
+            frameIndex = i
             await timer(duration)
         }
     }
 
-    playRace()
+    onMount(() => {
+        playRace()
+    })
 
-    $: domain = [0, d3.max(barData, d => d.value) || 1]
-    $: xScale = d3.scaleLinear(domain, [margin.left, width - margin.right])
-
-    $: ticks = xScale.ticks(width / 160)
 
     function fillOpacity(rank) {
         if (rank >= numBars) {
@@ -68,13 +86,13 @@
     <p></p>
 </div>
 
-{#if barData}
-<svg viewBox="0 0 {width} {height}">
+
+<svg id='id-bar-race' viewBox="0 0 {width} {height}">
     <g fill-opacity="0.6">
-        {#each barData as d (d.name)}
+        {#each $tweenedKeyframeData as d (d.name)}
             <rect
                 data-name="{d.name}"
-                style="transform:translate(0px, {y(Math.min(d.rank, numBars))}px)"
+                style="transform:translateY({y(d.rank)}px)"
                 fill="{colorScale(categoryByName.get(d.name))}"
                 height="{y.bandwidth()}"
                 x="{xScale(0)}"
@@ -103,7 +121,7 @@
       {/each}
     </g>
     <g text-anchor="end">
-        {#each barData as d (d.name)}
+        {#each $tweenedKeyframeData as d (d.name)}
             <text class="bar-label"
                 style="transform:translate({xScale(d.value)-xScale(0)}px, {y(Math.min(d.rank, numBars))}px)"
                 x="-6"
@@ -120,30 +138,17 @@
         y="{height - 6}"
         dy="0.0em"
         >
-        {currentYear.getUTCFullYear()}
+        {keyframeDate.getUTCFullYear()}
     </text>
 </svg>
-{/if}
+
 
 
 <style>
-    rect {
-        transition: all 500ms ease-in-out;
-    }
-
-
-    g.ticks {
-        transition: transform 500ms ease-in-out;
-    }
-
     text {
         font-size: 12px;
         font-family: sans-serif;
         fill: #333;
-    }
-
-    text.bar-label {
-        transition: transform 500ms ease-in-out;
     }
 
     text.ticker {
