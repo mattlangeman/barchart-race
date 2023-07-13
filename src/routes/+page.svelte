@@ -101,12 +101,12 @@
         {#each $tweenedKeyframeData as d (d.name)}
             <rect
                 data-name="{d.name}"
-                style="transform:translateY({y(d.rank)}px)"
+                style="transform:translateY({y(Math.min(d.rank, numBars))}px)"
                 fill="{colorScale(categoryByName.get(d.name))}"
                 height="{y.bandwidth()}"
                 x="{xScale(0)}"
                 width="{xScale(d.value)-xScale(0)}"
-                fill-opacity="{fillOpacity(d.rank)}"
+                fill-opacity="{fillOpacity(Math.min(d.rank, numBars))}"
                 >
             </rect>
         {/each}
