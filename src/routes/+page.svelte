@@ -1,14 +1,16 @@
 <script>
 	import * as d3 from "d3";
     import numeral from 'numeral';
-    import {onMount} from 'svelte';
-
+    import {createEventDispatcher, onMount} from 'svelte';
     import { tweened } from "svelte/motion";
+    import { linear } from "svelte/easing";
+
+    import { timer, elapsed } from "$lib/timer.js";
 
     /** @type {import('./$types').PageData} */
 	export let data
 
-    let duration = 500
+    let duration = 100
 	let barSize = 38
 	let numBars = 12
 
@@ -30,12 +32,12 @@
 
     const colorScale = d3.scaleOrdinal(d3.schemeTableau10);
     const categoryByName = new Map(data.data.map(d => [d.name, d.category]))
-    const tweenedKeyframeData = tweened(null, { duration });
-    const tweenedKeyframeMax = tweened(null, { duration });
+    const tweenedKeyframeData = tweened(null, { duration, easing: linear });
+    const tweenedKeyframeMax = tweened(null, { duration, easing: linear });
 
     colorScale.domain(Array.from(categoryByName.values()));
 
-    $: frameIndex = 0
+    let frameIndex = 0
     $: keyframe = data.keyframes[frameIndex]
     $: keyframeDate = keyframe[0]
     $: keyframeData = keyframe[1]
@@ -48,20 +50,27 @@
     $: console.log('currentData', currentData)
 
     $: tweenedKeyframeData.set(currentData)
+    //$: console.log('tweenedKeyframeData', $tweenedKeyframeData)
     $: tweenedKeyframeMax.set(d3.max(keyframeData, d => d.value))
     $: domain = [0, $tweenedKeyframeMax]
     $: xScale = d3.scaleLinear(domain, [margin.left, width - margin.right])
     $: ticks = xScale.ticks(width / 160)
 
-    const timer = ms => new Promise(res => setTimeout(res, ms))
+    let isEnabled = false
 
-    async function playRace() {
-        let svg = d3.select('svg#id-bar-race')
-        console.log('svg', svg)
-        for (let i=0; i < data.keyframes.length; i++) {
-            frameIndex = i
-            await timer(duration)
-        }
+    $: if (isEnabled) frameIndex = Math.min(Math.floor($elapsed / duration), data.keyframes.length - 1);
+    $: if (frameIndex === data.keyframes.length - 1) stopRace()
+    $: console.log('frameIndex', frameIndex)
+
+
+    function playRace() {
+        isEnabled = true
+        timer.start()
+    }
+
+    function stopRace() {
+        isEnabled = false
+        timer.stop()
     }
 
     onMount(() => {
