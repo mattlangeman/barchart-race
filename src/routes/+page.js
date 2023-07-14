@@ -1,49 +1,62 @@
 export const ssr = false;
 import * as d3 from "d3";
 
-
-function rank(names, value) {
-    const data = Array.from(names, name => ({name, value: value(name)}));
-    data.sort((a, b) => d3.descending(a.value, b.value));
-    let dataMap = new Map()
-    for (let i = 0; i < data.length; ++i) {
-        data[i].rank = i
-        //dataMap.set(data[i].name, {name: data[i].name, value: data[i].value, rank: i})
-    }
-    return data
-    //return dataMap;
-}
+let numBars = 12
 
 /** @type {import('./$types').PageServerLoad} */
 export async function load({ params }) {
     let data = await d3.csv("/data/category-brands.csv", d3.autoType)
-    let names = new Set(data.map(d => d.name))
     let datevalues = Array.from(d3.rollup(data, ([d]) => d.value, d => +d.date, d => d.name))
   						.map(([date, data]) => [new Date(date), data])
   						.sort(([a], [b]) => d3.ascending(a, b))
 
-    let keyframes = [];
-    let ka, a, kb, b;
-    let interpolationValue = 10
-    // we want to interpolate between each date in order to smooth out the animation
-    for ([[ka, a], [kb, b]] of d3.pairs(datevalues)) {
-        for (let i = 0; i < interpolationValue; ++i) {
-            const t = i / interpolationValue;
-            keyframes.push([
-                new Date(ka * (1 - t) + kb * t),
-                rank(names, name => (a.get(name) || 0) * (1 - t) + (b.get(name) || 0) * t)
-            ]);
+    // Make a list of all the brands that are shown in the chart at any point in time
+    let namesInChart = []
+    let nameValueRanksByDate = []
+    for (let i = 0; i < datevalues.length; i++) {
+        let nameValueRanks = new Map()
+        let tmpDate = datevalues[i][0]
+        let tmpMap = datevalues[i][1]
+        let tmpArr = Array.from(tmpMap.entries())
+        for (let j = 0; j < tmpArr.length; j++) {
+            let name = tmpArr[j][0]
+            let value = tmpArr[j][1]
+            let rank = j
+            if (rank <= numBars) {
+                namesInChart.push(name)
+            }
+            nameValueRanks.set(name, {name: name, value: value, rank: rank})
         }
+        nameValueRanksByDate.push({date: tmpDate, data: nameValueRanks})
     }
-    keyframes.push([new Date(kb), rank(names, name => b.get(name) || 0)]);
-    console.log('keyframes', keyframes)
-    let nameframes = d3.groups(keyframes.flatMap(([, data]) => data), d => d.name)
+    // Remove duplicates
+    namesInChart = [...new Set(namesInChart)]
 
+    // For each date, get the value and rank of each brand in the chart
+
+    // TODO: We need to make sure that the brands are always in the same order
+    let keyframes = []
+    for (let i = 0; i < nameValueRanksByDate.length; i++) {
+        let keyframeData = []
+        let data = nameValueRanksByDate[i].data
+        let nextRank = nameValueRanksByDate[i].data.size
+        for (let j = 0; j < namesInChart.length; j++) {
+            let name = namesInChart[j]
+            let nameData = {name: name, value: 0, rank: nextRank}
+            if (!data.has(name)) {
+                nextRank++
+            } else {
+                nameData = data.get(name)
+            }
+            keyframeData.push(nameData)
+        }
+        keyframes.push({date: nameValueRanksByDate[i].date, data: keyframeData})
+    }
+
+    console.log('namesInChart', namesInChart)
+    console.log('keyframes', keyframes)
     return {
-        data,
-        names,
-        datevalues,
-        nameframes,
+        namesInChart,
         keyframes
     };
 }

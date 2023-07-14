@@ -10,7 +10,7 @@
     /** @type {import('./$types').PageData} */
 	export let data
 
-    let duration = 100
+    let duration = 2000
 	let barSize = 38
 	let numBars = 12
 
@@ -24,65 +24,45 @@
     let height = margin.top + barSize * numBars + margin.bottom
     let width = 910
 
-    const y = d3.scaleBand()
-        .domain(d3.range(numBars + 1))
-        .rangeRound([margin.top, margin.top + barSize * (numBars + 1 + 0.1)])
-        .padding(0.1)
-
-
-    const colorScale = d3.scaleOrdinal(d3.schemeTableau10);
-    const categoryByName = new Map(data.data.map(d => [d.name, d.category]))
     const tweenedKeyframeData = tweened(null, { duration, easing: linear });
     const tweenedKeyframeMax = tweened(null, { duration, easing: linear });
 
-    colorScale.domain(Array.from(categoryByName.values()));
+    let currentFrameIndex = 0
 
-    let frameIndex = 0
-    $: keyframe = data.keyframes[frameIndex]
-    $: keyframeDate = keyframe[0]
-    $: keyframeData = keyframe[1]
+    $: currentKeyframe = data.keyframes[currentFrameIndex]
+    $: currentKeyframeData = currentKeyframe.data
+    $: currentKeyframeDate = currentKeyframe.date
 
-    console.log('names', data.names)
-    $: currentData = Array.from(data.names).map((name)=> ({
-        ...keyframeData.find((d) => d.name == name),
-    }))
+    const nextFrame = () => {
+        if (currentFrameIndex < data.keyframes.length - 1) {
+            currentFrameIndex += 1
+        }
+        /*
+        currentFrameIndex = currentFrameIndex + 1
+        if (currentFrameIndex < data.keyframes.length) {
+            tweenedKeyframeData.set(data.keyframes[currentFrameIndex].data).then(nextFrame)
+        }
+        */
+    }
 
-    $: console.log('currentData', currentData)
+    $: tweenedKeyframeData.set(currentKeyframeData).then(nextFrame)
+    $: tweenedKeyframeMax.set(d3.max(currentKeyframeData, d => d.value))
 
-    $: tweenedKeyframeData.set(currentData)
-    //$: console.log('tweenedKeyframeData', $tweenedKeyframeData)
-    $: tweenedKeyframeMax.set(d3.max(keyframeData, d => d.value))
+
     $: domain = [0, $tweenedKeyframeMax]
+    const yScale = d3.scaleLinear()
+        .domain([0, numBars])
+        .range([margin.top, margin.top + barSize * (numBars + 0.1)])
+
     $: xScale = d3.scaleLinear(domain, [margin.left, width - margin.right])
     $: ticks = xScale.ticks(width / 160)
-
-    let isEnabled = false
-
-    $: if (isEnabled) frameIndex = Math.min(Math.floor($elapsed / duration), data.keyframes.length - 1);
-    $: if (frameIndex === data.keyframes.length - 1) stopRace()
-    $: console.log('frameIndex', frameIndex)
-
-
-    function playRace() {
-        isEnabled = true
-        timer.start()
-    }
-
-    function stopRace() {
-        isEnabled = false
-        timer.stop()
-    }
-
-    onMount(() => {
-        playRace()
-    })
 
 
     function fillOpacity(rank) {
         if (rank >= numBars) {
             return 0
         } else {
-            return 0.6
+            return 0.7
         }
     }
 
@@ -95,18 +75,17 @@
     <p></p>
 </div>
 
-
 <svg id='id-bar-race' viewBox="0 0 {width} {height}">
     <g fill-opacity="0.6">
         {#each $tweenedKeyframeData as d (d.name)}
             <rect
                 data-name="{d.name}"
-                style="transform:translateY({y(Math.min(d.rank, numBars))}px)"
-                fill="{colorScale(categoryByName.get(d.name))}"
-                height="{y.bandwidth()}"
+                fill="coral"
+                height="{barSize}"
                 x="{xScale(0)}"
+                y="{yScale(d.rank)}"
                 width="{xScale(d.value)-xScale(0)}"
-                fill-opacity="{fillOpacity(Math.min(d.rank, numBars))}"
+                fill-opacity="{fillOpacity(d.rank)}"
                 >
             </rect>
         {/each}
@@ -132,7 +111,7 @@
     <g text-anchor="end">
         {#each $tweenedKeyframeData as d (d.name)}
             <text class="bar-label"
-                style="transform:translate({xScale(d.value)-xScale(0)}px, {y(Math.min(d.rank, numBars))}px)"
+                style="transform:translate({xScale(d.value)-xScale(0)}px, {yScale(d.rank)}px)"
                 x="-6"
                 y="21.5"
                 dy="-0.25em">
@@ -147,7 +126,7 @@
         y="{height - 6}"
         dy="0.0em"
         >
-        {keyframeDate.getUTCFullYear()}
+        {currentKeyframeDate.getUTCFullYear()}
     </text>
 </svg>
 
@@ -164,5 +143,11 @@
         font-size: 40px;
         font-family: sans-serif;
         fill: #333;
+    }
+
+    .bar-div {
+        top: 0;
+        left: 0;
+        position: absolute;
     }
 </style>
