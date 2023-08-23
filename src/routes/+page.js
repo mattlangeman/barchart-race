@@ -3,59 +3,66 @@ import * as d3 from "d3";
 
 let numBars = 12
 
+function chartData(names, valueFunction) {
+    let data = Array.from(names, name => ({name, value: valueFunction(name)}));
+    data.sort((a, b) => d3.descending(a.value, b.value));
+    let chartNames = []
+    for (let i = 0; i < data.length; ++i) {
+        data[i].rank = i;
+        if (i < numBars) chartNames.push(data[i].name)
+    }
+    return {names: chartNames, data: data};
+}
+
+
 /** @type {import('./$types').PageServerLoad} */
 export async function load({ params }) {
+    // data for brand value by year
     let data = await d3.csv("/data/category-brands.csv", d3.autoType)
+
+    // datevalues is an array of arrays
+    // each inner array containing the date and map of brand name to value
     let datevalues = Array.from(d3.rollup(data, ([d]) => d.value, d => +d.date, d => d.name))
   						.map(([date, data]) => [new Date(date), data])
   						.sort(([a], [b]) => d3.ascending(a, b))
 
-    // Make a list of all the brands that are shown in the chart at any point in time
-    let namesInChart = []
-    let nameValueRanksByDate = []
-    for (let i = 0; i < datevalues.length; i++) {
-        let nameValueRanks = new Map()
-        let tmpDate = datevalues[i][0]
-        let tmpMap = datevalues[i][1]
-        let tmpArr = Array.from(tmpMap.entries())
-        for (let j = 0; j < tmpArr.length; j++) {
-            let name = tmpArr[j][0]
-            let value = tmpArr[j][1]
-            let rank = j
-            if (rank <= numBars) {
-                namesInChart.push(name)
-            }
-            nameValueRanks.set(name, {name: name, value: value, rank: rank})
+    // all brand names in the dataset
+    let names = new Set(data.map(d => d.name))
+
+    // create keyframes that interpolate between each date (year) in the dataset
+    let keyframes = [];
+    let ka, a, kb, b;
+    let k = 10
+    let allChartNames = []
+    for ([[ka, a], [kb, b]] of d3.pairs(datevalues)) {
+        for (let i = 0; i < k; ++i) {
+            const t = i / k;
+            let tmp = chartData(names, name => (a.get(name) || 0) * (1 - t) + (b.get(name) || 0) * t)
+            allChartNames = allChartNames.concat(tmp.names)
+            keyframes.push({
+                date: new Date(ka * (1 - t) + kb * t),
+                data: tmp.data
+            });
         }
-        nameValueRanksByDate.push({date: tmpDate, data: nameValueRanks})
     }
-    // Remove duplicates
-    namesInChart = [...new Set(namesInChart)]
+    let tmp = chartData(names, name => b.get(name) || 0)
+    allChartNames = allChartNames.concat(tmp.names)
+    keyframes.push({date: new Date(kb), data: tmp.data});
+    let namesInChart = Array.from(new Set(allChartNames))
 
-    // For each date, get the value and rank of each brand in the chart
-
-    // TODO: We need to make sure that the brands are always in the same order
-    let keyframes = []
-    for (let i = 0; i < nameValueRanksByDate.length; i++) {
-        let keyframeData = []
-        let data = nameValueRanksByDate[i].data
-        let nextRank = nameValueRanksByDate[i].data.size
-        for (let j = 0; j < namesInChart.length; j++) {
-            let name = namesInChart[j]
-            let nameData = {name: name, value: 0, rank: nextRank}
-            if (!data.has(name)) {
-                nextRank++
-            } else {
-                nameData = data.get(name)
-            }
-            keyframeData.push(nameData)
+    let finalKeyframes = []
+    for (let i = 0; i < keyframes.length; ++i) {
+        let newKeyframe = {date: keyframes[i].date, data: []}
+        let keyframeMap = new Map(keyframes[i].data.map(d => [d.name, d]))
+        for (let j = 0; j < namesInChart.length; ++j) {
+            newKeyframe.data.push(keyframeMap.get(namesInChart[j]))
         }
-        keyframes.push({date: nameValueRanksByDate[i].date, data: keyframeData})
+        finalKeyframes.push(newKeyframe)
     }
 
-    console.log('namesInChart', namesInChart)
-    console.log('keyframes', keyframes)
+    keyframes = finalKeyframes
     return {
+        data,
         namesInChart,
         keyframes
     };
